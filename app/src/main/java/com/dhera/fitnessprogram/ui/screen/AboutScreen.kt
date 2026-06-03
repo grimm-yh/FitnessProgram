@@ -65,7 +65,7 @@ fun AboutScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = "v1.0",
+                    text = "v1.0.1",
                     style = MaterialTheme.typography.bodyLarge
                 )
                 
