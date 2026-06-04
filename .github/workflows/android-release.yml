@@ -9,6 +9,7 @@ permissions:
   contents: write
 
 jobs:
+
   build:
 
     runs-on: ubuntu-latest
@@ -18,20 +19,49 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup JDK
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
-      - name: Grant execute permission
+      - name: Decode Keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > release.jks
+
+      - name: Grant Execute Permission
         run: chmod +x gradlew
 
-      - name: Build APK
-        run: ./gradlew assembleRelease
+      - name: Build APK + AAB
+        env:
+          KEYSTORE_FILE: release.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          ./gradlew assembleRelease bundleRelease
+
+      - name: Rename APK
+        run: |
+          cp app/build/outputs/apk/release/*.apk \
+          FitnessPlanner-${{ github.ref_name }}.apk
+
+      - name: Rename AAB
+        run: |
+          cp app/build/outputs/bundle/release/*.aab \
+          FitnessPlanner-${{ github.ref_name }}.aab
+
+      - name: Generate Release Notes
+        id: notes
+        uses: mikepenz/release-changelog-builder-action@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
+          name: Fitness Planner ${{ github.ref_name }}
+          body: ${{ steps.notes.outputs.changelog }}
           files: |
-            app/build/outputs/apk/release/*.apk
+            FitnessPlanner-${{ github.ref_name }}.apk
+            FitnessPlanner-${{ github.ref_name }}.aab
