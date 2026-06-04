@@ -21,10 +21,7 @@ android {
 
         create("release") {
 
-            storeFile = file(
-                System.getenv("KEYSTORE_FILE")
-                    ?: "release.jks"
-            )
+            storeFile = rootProject.file(System.getenv("KEYSTORE_FILE") ?: "release.jks")
 
             storePassword =
                 System.getenv("KEYSTORE_PASSWORD")
