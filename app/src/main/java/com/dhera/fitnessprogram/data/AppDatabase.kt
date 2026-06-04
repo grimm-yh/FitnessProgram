@@ -25,7 +25,6 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "fitness_database"
                 )
-                    .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance
                 instance

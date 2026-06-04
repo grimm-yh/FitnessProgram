@@ -13,6 +13,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.dhera.fitnessprogram.AppConfig
 import com.dhera.fitnessprogram.R
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -51,7 +52,7 @@ fun AboutScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             Spacer(modifier = Modifier.height(16.dp))
             
             Text(
-                text = "Fitness Program",
+                text = AppConfig.APP_NAME,
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold
             )
@@ -65,7 +66,7 @@ fun AboutScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = "v1.0.1",
+                    text = AppConfig.VERSION_NAME,
                     style = MaterialTheme.typography.bodyLarge
                 )
                 
@@ -77,7 +78,7 @@ fun AboutScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = "grimm.huidu@outlook.com",
+                    text = AppConfig.CONTACT_EMAIL,
                     style = MaterialTheme.typography.bodyLarge
                 )
             }
