@@ -34,7 +34,8 @@ data class TrainingItem(
     val count: Int? = null,
     val duration: Int? = null, // in seconds
     val rest: Int? = null, // in seconds
-    val orderIndex: Int = 0
+    val orderIndex: Int = 0,
+    val notes: String = ""
 )
 
 @Entity(
@@ -45,5 +46,6 @@ data class DailyProgress(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val date: LocalDate,
     val itemId: Long,
-    val completed: Boolean
+    val completedSets: Int = 0,
+    val isFinished: Boolean = false
 )

@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -28,6 +29,7 @@ import com.dhera.fitnessprogram.ui.screen.AboutScreen
 import com.dhera.fitnessprogram.ui.screen.HomeScreen
 import com.dhera.fitnessprogram.ui.screen.PlansScreen
 import com.dhera.fitnessprogram.ui.screen.SettingsScreen
+import com.dhera.fitnessprogram.ui.screen.TimerWindow
 import com.dhera.fitnessprogram.ui.theme.FitnessProgramTheme
 
 class MainActivity : ComponentActivity() {
@@ -64,6 +66,11 @@ class MainActivity : ComponentActivity() {
 fun FitnessProgramApp(viewModel: MainViewModel, musicManager: MusicManager) {
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.HOME) }
     val isMusicPlaying by viewModel.isMusicPlaying.collectAsState()
+    
+    val activeTimerType by viewModel.activeTimerType.collectAsState()
+    val activeTimerTarget by viewModel.activeTimerTarget.collectAsState()
+    val timerMinimized by viewModel.timerMinimized.collectAsState()
+    val activeTimerTask by viewModel.activeTimerTask.collectAsState()
 
     NavigationSuiteScaffold(
         navigationSuiteItems = {
@@ -77,53 +84,80 @@ fun FitnessProgramApp(viewModel: MainViewModel, musicManager: MusicManager) {
                     },
                     label = { Text(it.label) },
                     selected = it == currentDestination,
-                    onClick = { currentDestination = it }
+                    onClick = { 
+                        currentDestination = it 
+                        musicManager.stopAllNotifications()
+                    }
                 )
             }
         }
     ) {
-        Scaffold(
-            modifier = Modifier.fillMaxSize(),
-            floatingActionButton = {
-                // Global Music Control Button
-                FloatingActionButton(
-                    onClick = {
-                        if (isMusicPlaying) {
-                            musicManager.pauseBackgroundMusic()
-                            viewModel.setMusicPlaying(false)
-                        } else {
-                            musicManager.startBackgroundMusic()
-                            viewModel.setMusicPlaying(true)
-                        }
-                    },
-                    modifier = Modifier.padding(bottom = 80.dp),
-                    containerColor = if (isMusicPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-                ) {
-                    Icon(
-                        imageVector = if (isMusicPlaying) Icons.Default.MusicNote else Icons.Default.MusicOff,
-                        contentDescription = "音乐控制"
-                    )
-                }
-            }
-        ) { innerPadding ->
-            val modifier = Modifier.padding(innerPadding)
-            
-            when (currentDestination) {
-                AppDestinations.HOME -> HomeScreen(viewModel, musicManager, modifier)
-                AppDestinations.PLANS -> PlansScreen(viewModel, modifier)
-                AppDestinations.SETTINGS -> {
-                    var showAbout by remember { mutableStateOf(false) }
-                    if (showAbout) {
-                        AboutScreen(onBack = { showAbout = false }, modifier = Modifier.fillMaxSize())
-                    } else {
-                        SettingsScreen(
-                            viewModel = viewModel,
-                            musicManager = musicManager,
-                            onAboutClick = { showAbout = true },
-                            modifier = modifier
+        Box(modifier = Modifier.fillMaxSize()) {
+            Scaffold(
+                modifier = Modifier.fillMaxSize(),
+                floatingActionButton = {
+                    // Global Music Control Button
+                    FloatingActionButton(
+                        onClick = {
+                            musicManager.stopAllNotifications()
+                            if (isMusicPlaying) {
+                                musicManager.pauseBackgroundMusic()
+                                viewModel.setMusicPlaying(false)
+                            } else {
+                                musicManager.startBackgroundMusic()
+                                viewModel.setMusicPlaying(true)
+                            }
+                        },
+                        modifier = Modifier.padding(bottom = 80.dp),
+                        containerColor = if (isMusicPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+                    ) {
+                        Icon(
+                            imageVector = if (isMusicPlaying) Icons.Default.MusicNote else Icons.Default.MusicOff,
+                            contentDescription = "音乐控制"
                         )
                     }
                 }
+            ) { innerPadding ->
+                val modifier = Modifier.padding(innerPadding)
+                
+                when (currentDestination) {
+                    AppDestinations.HOME -> HomeScreen(viewModel, musicManager, modifier)
+                    AppDestinations.PLANS -> PlansScreen(viewModel, musicManager, modifier)
+                    AppDestinations.SETTINGS -> {
+                        var showAbout by remember { mutableStateOf(false) }
+                        if (showAbout) {
+                            AboutScreen(onBack = { showAbout = false }, modifier = Modifier.fillMaxSize())
+                        } else {
+                            SettingsScreen(
+                                viewModel = viewModel,
+                                musicManager = musicManager,
+                                onAboutClick = { showAbout = true },
+                                modifier = modifier
+                            )
+                        }
+                    }
+                }
+            }
+            
+            // Global Floating Timer Window
+            if (activeTimerType != null) {
+                TimerWindow(
+                    type = activeTimerType!!,
+                    targetSeconds = activeTimerTarget,
+                    minimized = timerMinimized,
+                    onToggleMinimize = { 
+                        musicManager.stopAllNotifications()
+                        viewModel.toggleTimerMinimize() 
+                    },
+                    onClose = { 
+                        musicManager.stopAllNotifications()
+                        viewModel.closeTimer() 
+                    },
+                    onRestFinished = {
+                        activeTimerTask?.let { viewModel.incrementTaskSets(it) }
+                    },
+                    musicManager = musicManager
+                )
             }
         }
     }

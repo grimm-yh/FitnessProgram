@@ -78,6 +78,7 @@ fun SettingsScreen(
                 Switch(
                     checked = playMusicOnStartup,
                     onCheckedChange = { 
+                        musicManager.stopAllNotifications()
                         viewModel.setPlayMusicOnStartup(it)
                         if (it) {
                             musicManager.startBackgroundMusic()
@@ -94,7 +95,10 @@ fun SettingsScreen(
         Spacer(modifier = Modifier.height(24.dp))
         
         Button(
-            onClick = { exportLauncher.launch("fitness_plans.json") },
+            onClick = { 
+                musicManager.stopAllNotifications()
+                exportLauncher.launch("fitness_plans.json") 
+            },
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("导出 JSON")
@@ -103,7 +107,10 @@ fun SettingsScreen(
         Spacer(modifier = Modifier.height(16.dp))
         
         Button(
-            onClick = { importLauncher.launch(arrayOf("application/json")) },
+            onClick = { 
+                musicManager.stopAllNotifications()
+                importLauncher.launch(arrayOf("application/json")) 
+            },
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("导入 JSON")
@@ -114,7 +121,10 @@ fun SettingsScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         TextButton(
-            onClick = onAboutClick,
+            onClick = {
+                musicManager.stopAllNotifications()
+                onAboutClick()
+            },
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("关于")
@@ -135,7 +145,8 @@ data class JsonItem(
     val sets: Int,
     val count: Int?,
     val duration: Int?,
-    val rest: Int?
+    val rest: Int?,
+    val notes: String? = ""
 )
 
 private suspend fun exportData(context: Context, uri: Uri, viewModel: MainViewModel) {
@@ -147,7 +158,7 @@ private suspend fun exportData(context: Context, uri: Uri, viewModel: MainViewMo
                     name = plan.name,
                     startDate = plan.startDate.toString(),
                     interval = plan.intervalDays,
-                    items = items.map { JsonItem(it.name, it.sets, it.count, it.duration, it.rest) }
+                    items = items.map { JsonItem(it.name, it.sets, it.count, it.duration, it.rest, it.notes) }
                 )
             })
             
@@ -188,7 +199,8 @@ private suspend fun importData(context: Context, uri: Uri, viewModel: MainViewMo
                                 sets = jsonItem.sets,
                                 count = jsonItem.count,
                                 duration = jsonItem.duration,
-                                rest = jsonItem.rest
+                                rest = jsonItem.rest,
+                                notes = jsonItem.notes ?: ""
                             )
                         }
                         plan to items

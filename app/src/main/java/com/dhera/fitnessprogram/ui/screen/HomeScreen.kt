@@ -2,23 +2,22 @@ package com.dhera.fitnessprogram.ui.screen
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.dhera.fitnessprogram.MusicManager
+import com.dhera.fitnessprogram.ui.GlobalTimerType
 import com.dhera.fitnessprogram.ui.MainViewModel
 import com.dhera.fitnessprogram.ui.TodayTask
 import kotlinx.coroutines.delay
@@ -38,15 +37,8 @@ fun HomeScreen(viewModel: MainViewModel, musicManager: MusicManager, modifier: M
             .fillMaxSize()
             .padding(16.dp),
     ) {
-        Text(
-            text = date.format(dateFormatter),
-            style = MaterialTheme.typography.titleLarge
-        )
-        Text(
-            text = date.format(dayOfWeekFormatter),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.secondary
-        )
+        Text(text = date.format(dateFormatter), style = MaterialTheme.typography.titleLarge)
+        Text(text = date.format(dayOfWeekFormatter), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
 
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -55,24 +47,26 @@ fun HomeScreen(viewModel: MainViewModel, musicManager: MusicManager, modifier: M
                 Text(text = "今日休息", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.outline)
             }
         } else {
-            val completedCount = tasks.count { it.completed }
-            val progress = completedCount.toFloat() / tasks.size
-
-            Text(text = "今日训练完成率: ${(progress * 100).toInt()}%", fontWeight = FontWeight.Bold)
-            LinearProgressIndicator(
-                progress = { progress },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp)
-            )
+            val overallProgress = tasks.count { it.isFinished }.toFloat() / tasks.size
+            Text(text = "今日训练完成率: ${(overallProgress * 100).toInt()}%", fontWeight = FontWeight.Bold)
+            LinearProgressIndicator(progress = { overallProgress }, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
 
             Spacer(modifier = Modifier.height(16.dp))
 
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(tasks) { task ->
-                    TaskItem(task, musicManager) {
-                        viewModel.toggleTaskCompletion(task)
-                    }
+                    TaskItem(
+                        task = task,
+                        musicManager = musicManager,
+                        onToggleFinished = { 
+                            musicManager.stopAllNotifications()
+                            viewModel.toggleTaskFinished(task) 
+                        },
+                        onStartTimer = { type, target ->
+                            musicManager.stopAllNotifications()
+                            viewModel.startTimer(type, target, task)
+                        }
+                    )
                 }
             }
         }
@@ -80,16 +74,24 @@ fun HomeScreen(viewModel: MainViewModel, musicManager: MusicManager, modifier: M
 }
 
 @Composable
-fun TaskItem(task: TodayTask, musicManager: MusicManager, onToggle: () -> Unit) {
+fun TaskItem(
+    task: TodayTask,
+    musicManager: MusicManager,
+    onToggleFinished: () -> Unit,
+    onStartTimer: (GlobalTimerType, Int) -> Unit
+) {
     var expanded by remember { mutableStateOf(false) }
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .animateContentSize()
-            .clickable { expanded = !expanded },
+            .clickable { 
+                musicManager.stopAllNotifications()
+                expanded = !expanded 
+            },
         colors = CardDefaults.cardColors(
-            containerColor = if (task.completed) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface
+            containerColor = if (task.isFinished) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface
         )
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -100,50 +102,64 @@ fun TaskItem(task: TodayTask, musicManager: MusicManager, onToggle: () -> Unit) 
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(text = task.item.name, style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        text = buildString {
-                            append("${task.item.sets}组 ")
-                            task.item.count?.let { append("${it}次 ") }
-                            task.item.duration?.let { append("${it}秒 ") }
-                            task.item.rest?.let { append("间歇${it}秒") }
-                        },
-                        style = MaterialTheme.typography.bodySmall
+                    val setProgress = if (task.item.sets > 0) task.completedSets.toFloat() / task.item.sets else 1f
+                    LinearProgressIndicator(
+                        progress = { setProgress },
+                        modifier = Modifier.width(100.dp).height(4.dp).padding(vertical = 2.dp),
+                        color = if (task.isFinished) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        text = "计划: ${task.planName}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
+                        text = "${task.completedSets}/${task.item.sets}组 | ${task.item.count ?: "-"}次",
+                        style = MaterialTheme.typography.bodySmall
                     )
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(
-                        checked = task.completed,
-                        onCheckedChange = { onToggle() },
-                        modifier = Modifier.clickable(enabled = false) { }
-                    )
+                    IconButton(onClick = onToggleFinished) {
+                        Icon(
+                            imageVector = if (task.isFinished) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                            contentDescription = "完成",
+                            tint = if (task.isFinished) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                        )
+                    }
                     Icon(
                         imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                        contentDescription = if (expanded) "收起" else "展开"
+                        contentDescription = null
                     )
                 }
             }
 
             AnimatedVisibility(visible = expanded) {
-                Column(
-                    modifier = Modifier.padding(top = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    if ((task.item.duration ?: 0) > 0) {
-                        DurationTimer(targetSeconds = task.item.duration ?: 0, musicManager = musicManager)
+                Column(modifier = Modifier.padding(top = 12.dp)) {
+                    if (task.item.notes.isNotEmpty()) {
+                        Text(text = "备注: ${task.item.notes}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                        Spacer(modifier = Modifier.height(8.dp))
                     }
                     
-                    if ((task.item.rest ?: 0) > 0) {
-                        if ((task.item.duration ?: 0) > 0) HorizontalDivider()
-                        CountdownTimer(durationSeconds = task.item.rest ?: 0, musicManager = musicManager)
-                    }
-                    
-                    if ((task.item.duration ?: 0) <= 0 && (task.item.rest ?: 0) <= 0) {
-                        Text(text = "无计时或间歇项", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if ((task.item.duration ?: 0) > 0) {
+                            Button(
+                                onClick = { onStartTimer(GlobalTimerType.DURATION, task.item.duration!!) },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer, contentColor = MaterialTheme.colorScheme.onTertiaryContainer)
+                            ) {
+                                Icon(Icons.Default.Timer, contentDescription = null)
+                                Spacer(Modifier.width(4.dp))
+                                Text("持续 ${task.item.duration}s")
+                            }
+                        }
+                        if ((task.item.rest ?: 0) > 0) {
+                            Button(
+                                onClick = { onStartTimer(GlobalTimerType.REST, task.item.rest!!) },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.History, contentDescription = null)
+                                Spacer(Modifier.width(4.dp))
+                                Text("间歇 ${task.item.rest}s")
+                            }
+                        }
                     }
                 }
             }
@@ -152,109 +168,134 @@ fun TaskItem(task: TodayTask, musicManager: MusicManager, onToggle: () -> Unit) 
 }
 
 @Composable
-fun DurationTimer(targetSeconds: Int, musicManager: MusicManager) {
-    var timeElapsed by remember { mutableIntStateOf(0) }
-    var isRunning by remember { mutableStateOf(false) }
-    var hasSoundPlayed by remember { mutableStateOf(false) }
+fun TimerWindow(
+    type: GlobalTimerType,
+    targetSeconds: Int,
+    minimized: Boolean,
+    onToggleMinimize: () -> Unit,
+    onClose: () -> Unit,
+    onRestFinished: () -> Unit,
+    musicManager: MusicManager
+) {
+    var time by remember(type, targetSeconds) { mutableIntStateOf(if (type == GlobalTimerType.REST) targetSeconds else 0) }
+    var isRunning by remember { mutableStateOf(true) }
+    var soundPlayed by remember { mutableStateOf(false) }
+    var lastTickTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
     LaunchedEffect(isRunning) {
         while (isRunning) {
-            delay(1000L)
-            timeElapsed += 1
-            if (timeElapsed == targetSeconds && !hasSoundPlayed) {
-                musicManager.playTaskFinishSound()
-                hasSoundPlayed = true
+            delay(200)
+            val now = System.currentTimeMillis()
+            val diff = (now - lastTickTime) / 1000
+            if (diff >= 1) {
+                val secondsPassed = diff.toInt()
+                lastTickTime = now
+                
+                if (type == GlobalTimerType.REST) {
+                    if (time > 0) {
+                        time = (time - secondsPassed).coerceAtLeast(0)
+                    }
+                    if (time == 0 && !soundPlayed) {
+                        musicManager.playRestFinishSound()
+                        soundPlayed = true
+                        isRunning = false
+                        onRestFinished()
+                    }
+                } else {
+                    time += secondsPassed
+                    if (time >= targetSeconds && !soundPlayed) {
+                        musicManager.playDurationFinishSound()
+                        soundPlayed = true
+                    }
+                }
             }
         }
     }
 
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = "动作计时: $timeElapsed / $targetSeconds 秒",
-            style = MaterialTheme.typography.headlineSmall,
-            color = if (timeElapsed >= targetSeconds) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
-        )
-        Row(
-            modifier = Modifier.padding(top = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+    val windowModifier = if (minimized) {
+        Modifier
+            .padding(16.dp)
+            .size(width = 120.dp, height = 70.dp)
+            .background(MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.shapes.medium)
+            .clickable { 
+                musicManager.stopAllNotifications()
+                onToggleMinimize() 
+            }
+            .padding(8.dp)
+    } else {
+        Modifier
+            .padding(32.dp)
+            .fillMaxWidth()
+            .wrapContentHeight()
+            .background(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.shapes.extraLarge)
+            .padding(16.dp)
+    }
+
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = if (minimized) Alignment.TopEnd else Alignment.Center) {
+        if (!minimized) {
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f)).clickable { 
+                musicManager.stopAllNotifications()
+                onClose() 
+            })
+        }
+        
+        Column(
+            modifier = windowModifier,
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            Button(
-                onClick = { isRunning = !isRunning },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isRunning) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.tertiaryContainer,
-                    contentColor = if (isRunning) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onTertiaryContainer
+            if (minimized) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(if (type == GlobalTimerType.REST) Icons.Default.History else Icons.Default.Timer, null, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(text = "$time s", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                }
+            } else {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = {
+                        musicManager.stopAllNotifications()
+                        onToggleMinimize()
+                    }) { 
+                        Icon(Icons.Default.OpenInFull, contentDescription = "缩小", modifier = Modifier.size(20.dp)) 
+                    }
+                    Text(text = if (type == GlobalTimerType.REST) "间歇倒计时" else "动作计时", style = MaterialTheme.typography.titleMedium)
+                    IconButton(onClick = {
+                        musicManager.stopAllNotifications()
+                        onClose()
+                    }) { 
+                        Icon(Icons.Default.Close, contentDescription = "关闭") 
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                Text(
+                    text = if (type == GlobalTimerType.REST) "$time" else "$time / $targetSeconds",
+                    style = MaterialTheme.typography.displayLarge,
+                    color = if (type == GlobalTimerType.REST && time == 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                 )
-            ) {
-                Icon(
-                    imageVector = if (isRunning) Icons.Default.Stop else Icons.Default.PlayArrow,
-                    contentDescription = if (isRunning) "停止" else "开始"
-                )
-                Text(text = if (isRunning) "停止" else "开始计时")
-            }
-            OutlinedButton(onClick = {
-                timeElapsed = 0
-                isRunning = false
-                hasSoundPlayed = false
-            }) {
-                Icon(Icons.Default.Refresh, contentDescription = "重置")
-                Spacer(Modifier.width(4.dp))
-                Text(text = "重置")
-            }
-        }
-    }
-}
-
-@Composable
-fun CountdownTimer(durationSeconds: Int, musicManager: MusicManager) {
-    var timeLeft by remember { mutableIntStateOf(durationSeconds) }
-    var isRunning by remember { mutableStateOf(false) }
-
-    LaunchedEffect(isRunning, timeLeft) {
-        if (isRunning && timeLeft > 0) {
-            delay(1000L)
-            timeLeft -= 1
-        } else if (timeLeft == 0 && isRunning) {
-            isRunning = false
-            musicManager.playThreeStageNotification()
-        }
-    }
-
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = "间歇倒计时: $timeLeft 秒",
-            style = MaterialTheme.typography.headlineSmall,
-            color = if (timeLeft == 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-        )
-        Row(
-            modifier = Modifier.padding(top = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Button(
-                onClick = { isRunning = !isRunning },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isRunning) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = if (isRunning) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            ) {
-                Icon(
-                    imageVector = if (isRunning) Icons.Default.Stop else Icons.Default.PlayArrow,
-                    contentDescription = if (isRunning) "停止" else "开始"
-                )
-                Text(text = if (isRunning) "停止" else "开始休息")
-            }
-            OutlinedButton(onClick = {
-                timeLeft = durationSeconds
-                isRunning = false
-            }) {
-                Icon(Icons.Default.Refresh, contentDescription = "重置")
-                Spacer(Modifier.width(4.dp))
-                Text(text = "重置")
+                
+                Spacer(modifier = Modifier.height(24.dp))
+                
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Button(onClick = { 
+                        musicManager.stopAllNotifications()
+                        if (!isRunning) lastTickTime = System.currentTimeMillis()
+                        isRunning = !isRunning 
+                    }) {
+                        Icon(if (isRunning) Icons.Default.Pause else Icons.Default.PlayArrow, null)
+                        Text(if (isRunning) "暂停" else "继续")
+                    }
+                    OutlinedButton(onClick = { 
+                        musicManager.stopAllNotifications()
+                        time = if (type == GlobalTimerType.REST) targetSeconds else 0
+                        soundPlayed = false
+                        lastTickTime = System.currentTimeMillis()
+                    }) {
+                        Icon(Icons.Default.Refresh, null)
+                        Text("重置")
+                    }
+                }
             }
         }
     }

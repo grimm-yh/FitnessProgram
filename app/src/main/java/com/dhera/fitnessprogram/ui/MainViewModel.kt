@@ -19,8 +19,11 @@ import java.time.temporal.ChronoUnit
 data class TodayTask(
     val item: TrainingItem,
     val planName: String,
-    val completed: Boolean
+    val completedSets: Int,
+    val isFinished: Boolean
 )
+
+enum class GlobalTimerType { REST, DURATION }
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class MainViewModel(application: Application, private val repository: TrainingRepository) : AndroidViewModel(application) {
@@ -36,6 +39,35 @@ class MainViewModel(application: Application, private val repository: TrainingRe
 
     private val _isMusicPlaying = MutableStateFlow(false)
     val isMusicPlaying: StateFlow<Boolean> = _isMusicPlaying.asStateFlow()
+
+    // Global Timer State
+    private val _activeTimerType = MutableStateFlow<GlobalTimerType?>(null)
+    val activeTimerType = _activeTimerType.asStateFlow()
+    
+    private val _activeTimerTarget = MutableStateFlow(0)
+    val activeTimerTarget = _activeTimerTarget.asStateFlow()
+    
+    private val _activeTimerTask = MutableStateFlow<TodayTask?>(null)
+    val activeTimerTask = _activeTimerTask.asStateFlow()
+    
+    private val _timerMinimized = MutableStateFlow(false)
+    val timerMinimized = _timerMinimized.asStateFlow()
+
+    fun startTimer(type: GlobalTimerType, target: Int, task: TodayTask) {
+        _activeTimerType.value = type
+        _activeTimerTarget.value = target
+        _activeTimerTask.value = task
+        _timerMinimized.value = false
+    }
+
+    fun closeTimer() {
+        _activeTimerType.value = null
+        _activeTimerTask.value = null
+    }
+
+    fun toggleTimerMinimize() {
+        _timerMinimized.value = !_timerMinimized.value
+    }
 
     fun setPlayMusicOnStartup(enabled: Boolean) {
         _playMusicOnStartup.value = enabled
@@ -72,18 +104,39 @@ class MainViewModel(application: Application, private val repository: TrainingRe
         _selectedDate.flatMapLatest { repository.getProgressForDate(it) }
     ) { itemsWithPlanName, progressList ->
         itemsWithPlanName.map { (item, planName) ->
-            val isCompleted = progressList.find { it.itemId == item.id }?.completed ?: false
-            TodayTask(item, planName, isCompleted)
+            val progress = progressList.find { it.itemId == item.id }
+            TodayTask(
+                item = item,
+                planName = planName,
+                completedSets = progress?.completedSets ?: 0,
+                isFinished = progress?.isFinished ?: false
+            )
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    fun toggleTaskCompletion(task: TodayTask) {
+    fun incrementTaskSets(task: TodayTask) {
+        viewModelScope.launch {
+            val newCompletedSets = task.completedSets + 1
+            val isNowFinished = newCompletedSets >= task.item.sets
+            repository.updateProgress(
+                DailyProgress(
+                    date = _selectedDate.value,
+                    itemId = task.item.id,
+                    completedSets = newCompletedSets,
+                    isFinished = isNowFinished || task.isFinished
+                )
+            )
+        }
+    }
+
+    fun toggleTaskFinished(task: TodayTask) {
         viewModelScope.launch {
             repository.updateProgress(
                 DailyProgress(
                     date = _selectedDate.value,
                     itemId = task.item.id,
-                    completed = !task.completed
+                    completedSets = if (!task.isFinished) task.item.sets else 0,
+                    isFinished = !task.isFinished
                 )
             )
         }

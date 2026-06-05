@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import com.dhera.fitnessprogram.MusicManager
 import com.dhera.fitnessprogram.data.entity.TrainingItem
 import com.dhera.fitnessprogram.data.entity.TrainingPlan
 import com.dhera.fitnessprogram.ui.MainViewModel
@@ -31,7 +32,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 @Composable
-fun PlansScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
+fun PlansScreen(viewModel: MainViewModel, musicManager: MusicManager, modifier: Modifier = Modifier) {
     val plans by viewModel.allPlans.collectAsState()
     var selectedPlan by remember { mutableStateOf<TrainingPlan?>(null) }
     var showAddPlanDialog by remember { mutableStateOf(false) }
@@ -40,6 +41,7 @@ fun PlansScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
         PlanDetailView(
             plan = selectedPlan!!,
             viewModel = viewModel,
+            musicManager = musicManager,
             onBack = { selectedPlan = null },
             modifier = modifier
         )
@@ -48,7 +50,10 @@ fun PlansScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
         Scaffold(
             modifier = modifier,
             floatingActionButton = {
-                FloatingActionButton(onClick = { showAddPlanDialog = true }) {
+                FloatingActionButton(onClick = { 
+                    musicManager.stopAllNotifications()
+                    showAddPlanDialog = true 
+                }) {
                     Icon(Icons.Default.Add, contentDescription = "新增计划")
                 }
             }
@@ -66,8 +71,14 @@ fun PlansScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                         itemsIndexed(plans) { _, plan ->
                             PlanItem(
                                 plan = plan,
-                                onClick = { selectedPlan = plan },
-                                onDelete = { viewModel.deletePlan(plan) }
+                                onClick = { 
+                                    musicManager.stopAllNotifications()
+                                    selectedPlan = plan 
+                                },
+                                onDelete = { 
+                                    musicManager.stopAllNotifications()
+                                    viewModel.deletePlan(plan) 
+                                }
                             )
                         }
                     }
@@ -92,6 +103,7 @@ fun PlansScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
 fun PlanDetailView(
     plan: TrainingPlan,
     viewModel: MainViewModel,
+    musicManager: MusicManager,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -117,19 +129,28 @@ fun PlanDetailView(
             TopAppBar(
                 title = { Text(plan.name) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = {
+                        musicManager.stopAllNotifications()
+                        onBack()
+                    }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
                 },
                 actions = {
-                    IconButton(onClick = { editingPlan = plan }) {
+                    IconButton(onClick = { 
+                        musicManager.stopAllNotifications()
+                        editingPlan = plan 
+                    }) {
                         Icon(Icons.Default.Edit, contentDescription = "编辑计划")
                     }
                 }
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showAddItemDialog = true }) {
+            FloatingActionButton(onClick = { 
+                musicManager.stopAllNotifications()
+                showAddItemDialog = true 
+            }) {
                 Icon(Icons.Default.Add, contentDescription = "添加动作")
             }
         }
@@ -156,6 +177,7 @@ fun PlanDetailView(
                     itemsIndexed(items, key = { _, item -> item.id }) { index, item ->
                         val dismissState = rememberSwipeToDismissBoxState(
                             confirmValueChange = { value ->
+                                musicManager.stopAllNotifications()
                                 when (value) {
                                     SwipeToDismissBoxValue.EndToStart -> {
                                         viewModel.deleteItem(item)
@@ -199,7 +221,10 @@ fun PlanDetailView(
                                 .offset(y = if (isDragging) draggingOffset.dp else 0.dp)
                                 .pointerInput(Unit) {
                                     detectDragGesturesAfterLongPress(
-                                        onDragStart = { draggedItemIndex = index },
+                                        onDragStart = { 
+                                            musicManager.stopAllNotifications()
+                                            draggedItemIndex = index 
+                                        },
                                         onDragEnd = {
                                             draggedItemIndex = null
                                             draggingOffset = 0f
@@ -406,6 +431,7 @@ fun AddEditItemDialog(
     var count by remember { mutableStateOf(item?.count?.toString() ?: "") }
     var duration by remember { mutableStateOf(item?.duration?.toString() ?: "") }
     var rest by remember { mutableStateOf(item?.rest?.toString() ?: "") }
+    var notes by remember { mutableStateOf(item?.notes ?: "") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -417,6 +443,7 @@ fun AddEditItemDialog(
                 item { TextField(value = count, onValueChange = { count = it }, label = { Text("次数 (可选)") }) }
                 item { TextField(value = duration, onValueChange = { duration = it }, label = { Text("时长/秒 (可选)") }) }
                 item { TextField(value = rest, onValueChange = { rest = it }, label = { Text("间歇/秒 (可选)") }) }
+                item { TextField(value = notes, onValueChange = { notes = it }, label = { Text("备注 (可选)") }, minLines = 2) }
             }
         },
         confirmButton = {
@@ -430,7 +457,8 @@ fun AddEditItemDialog(
                         count = count.toIntOrNull(),
                         duration = duration.toIntOrNull(),
                         rest = rest.toIntOrNull(),
-                        orderIndex = item?.orderIndex ?: 0
+                        orderIndex = item?.orderIndex ?: 0,
+                        notes = notes
                     )
                 )
             }) {
