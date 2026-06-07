@@ -5,20 +5,27 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.dhera.fitnessprogram.MusicManager
 import com.dhera.fitnessprogram.data.entity.TrainingItem
 import com.dhera.fitnessprogram.data.entity.TrainingPlan
 import com.dhera.fitnessprogram.ui.MainViewModel
+import com.dhera.fitnessprogram.ui.theme.AppTheme
 import com.google.gson.GsonBuilder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -37,6 +44,7 @@ fun SettingsScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val playMusicOnStartup by viewModel.playMusicOnStartup.collectAsState()
+    val currentTheme by viewModel.appTheme.collectAsState()
     
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json"),
@@ -64,6 +72,30 @@ fun SettingsScreen(
         Text(text = "设置", style = MaterialTheme.typography.headlineMedium)
         Spacer(modifier = Modifier.height(24.dp))
         
+        // Theme Settings
+        Text(text = "切换主题", style = MaterialTheme.typography.titleMedium)
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            AppTheme.entries.forEach { theme ->
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(theme.primary, MaterialTheme.shapes.small)
+                        .clickable { viewModel.setAppTheme(theme) }
+                        .padding(4.dp)
+                ) {
+                    if (currentTheme == theme) {
+                        Icon(Icons.Default.Check, contentDescription = null, tint = Color.White)
+                    }
+                }
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(24.dp))
+
         // Music Settings
         Card(modifier = Modifier.fillMaxWidth()) {
             Row(
@@ -99,7 +131,8 @@ fun SettingsScreen(
                 musicManager.stopAllNotifications()
                 exportLauncher.launch("fitness_plans.json") 
             },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            shape = RectangleShape
         ) {
             Text("导出 JSON")
         }
@@ -111,7 +144,8 @@ fun SettingsScreen(
                 musicManager.stopAllNotifications()
                 importLauncher.launch(arrayOf("application/json")) 
             },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            shape = RectangleShape
         ) {
             Text("导入 JSON")
         }
@@ -120,12 +154,13 @@ fun SettingsScreen(
         HorizontalDivider()
         Spacer(modifier = Modifier.height(16.dp))
 
-        TextButton(
+        OutlinedButton(
             onClick = {
                 musicManager.stopAllNotifications()
                 onAboutClick()
             },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            shape = RectangleShape
         ) {
             Text("关于")
         }

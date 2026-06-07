@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -14,13 +15,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.dhera.fitnessprogram.MusicManager
 import com.dhera.fitnessprogram.ui.GlobalTimerType
 import com.dhera.fitnessprogram.ui.MainViewModel
 import com.dhera.fitnessprogram.ui.TodayTask
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.*
@@ -64,7 +67,7 @@ fun HomeScreen(viewModel: MainViewModel, musicManager: MusicManager, modifier: M
                         },
                         onStartTimer = { type, target ->
                             musicManager.stopAllNotifications()
-                            viewModel.startTimer(type, target, task)
+                            viewModel.startTimer(type, target, task, musicManager)
                         }
                     )
                 }
@@ -90,6 +93,7 @@ fun TaskItem(
                 musicManager.stopAllNotifications()
                 expanded = !expanded 
             },
+        shape = RectangleShape,
         colors = CardDefaults.cardColors(
             containerColor = if (task.isFinished) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface
         )
@@ -142,22 +146,24 @@ fun TaskItem(
                         if ((task.item.duration ?: 0) > 0) {
                             Button(
                                 onClick = { onStartTimer(GlobalTimerType.DURATION, task.item.duration!!) },
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.weight(1f).height(48.dp),
+                                shape = RectangleShape,
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer, contentColor = MaterialTheme.colorScheme.onTertiaryContainer)
                             ) {
                                 Icon(Icons.Default.Timer, contentDescription = null)
-                                Spacer(Modifier.width(4.dp))
-                                Text("持续 ${task.item.duration}s")
+                                Spacer(Modifier.width(8.dp))
+                                Text("持续 ${task.item.duration}s", fontSize = 15.sp)
                             }
                         }
                         if ((task.item.rest ?: 0) > 0) {
                             Button(
                                 onClick = { onStartTimer(GlobalTimerType.REST, task.item.rest!!) },
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f).height(48.dp),
+                                shape = RectangleShape
                             ) {
                                 Icon(Icons.Default.History, contentDescription = null)
-                                Spacer(Modifier.width(4.dp))
-                                Text("间歇 ${task.item.rest}s")
+                                Spacer(Modifier.width(8.dp))
+                                Text("间歇 ${task.item.rest}s", fontSize = 15.sp)
                             }
                         }
                     }
@@ -174,60 +180,27 @@ fun TimerWindow(
     minimized: Boolean,
     onToggleMinimize: () -> Unit,
     onClose: () -> Unit,
-    onRestFinished: () -> Unit,
-    musicManager: MusicManager
+    musicManager: MusicManager,
+    viewModel: MainViewModel? = null
 ) {
-    var time by remember(type, targetSeconds) { mutableIntStateOf(if (type == GlobalTimerType.REST) targetSeconds else 0) }
-    var isRunning by remember { mutableStateOf(true) }
-    var soundPlayed by remember { mutableStateOf(false) }
-    var lastTickTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
-
-    LaunchedEffect(isRunning) {
-        while (isRunning) {
-            delay(200)
-            val now = System.currentTimeMillis()
-            val diff = (now - lastTickTime) / 1000
-            if (diff >= 1) {
-                val secondsPassed = diff.toInt()
-                lastTickTime = now
-                
-                if (type == GlobalTimerType.REST) {
-                    if (time > 0) {
-                        time = (time - secondsPassed).coerceAtLeast(0)
-                    }
-                    if (time == 0 && !soundPlayed) {
-                        musicManager.playRestFinishSound()
-                        soundPlayed = true
-                        isRunning = false
-                        onRestFinished()
-                    }
-                } else {
-                    time += secondsPassed
-                    if (time >= targetSeconds && !soundPlayed) {
-                        musicManager.playDurationFinishSound()
-                        soundPlayed = true
-                    }
-                }
-            }
-        }
-    }
+    val time by (viewModel?.timerCurrentValue ?: MutableStateFlow(0)).collectAsState()
+    val isRunning by (viewModel?.timerIsRunning ?: MutableStateFlow(false)).collectAsState()
 
     val windowModifier = if (minimized) {
         Modifier
-            .padding(16.dp)
-            .size(width = 120.dp, height = 70.dp)
-            .background(MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.shapes.medium)
+            .padding(top = 16.dp, end = 16.dp) // Exactly aligns with the 16dp top padding of the HomeScreen content
+            .size(width = 80.dp, height = 64.dp) // Doubled height as requested
+            .background(MaterialTheme.colorScheme.secondaryContainer, RectangleShape)
             .clickable { 
                 musicManager.stopAllNotifications()
                 onToggleMinimize() 
             }
-            .padding(8.dp)
     } else {
         Modifier
             .padding(32.dp)
             .fillMaxWidth()
             .wrapContentHeight()
-            .background(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.shapes.extraLarge)
+            .background(MaterialTheme.colorScheme.surfaceVariant, RectangleShape)
             .padding(16.dp)
     }
 
@@ -235,7 +208,7 @@ fun TimerWindow(
         if (!minimized) {
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f)).clickable { 
                 musicManager.stopAllNotifications()
-                onClose() 
+                onToggleMinimize() 
             })
         }
         
@@ -245,10 +218,10 @@ fun TimerWindow(
             verticalArrangement = Arrangement.Center
         ) {
             if (minimized) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(if (type == GlobalTimerType.REST) Icons.Default.History else Icons.Default.Timer, null, modifier = Modifier.size(20.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                    Icon(if (type == GlobalTimerType.REST) Icons.Default.History else Icons.Default.Timer, null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text(text = "$time s", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                    Text(text = "$time", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSecondaryContainer)
                 }
             } else {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -278,21 +251,28 @@ fun TimerWindow(
                 Spacer(modifier = Modifier.height(24.dp))
                 
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Button(onClick = { 
-                        musicManager.stopAllNotifications()
-                        if (!isRunning) lastTickTime = System.currentTimeMillis()
-                        isRunning = !isRunning 
-                    }) {
+                    Button(
+                        onClick = { 
+                            musicManager.stopAllNotifications()
+                            viewModel?.pauseResumeTimer()
+                        },
+                        modifier = Modifier.weight(1f).height(48.dp),
+                        shape = RectangleShape
+                    ) {
                         Icon(if (isRunning) Icons.Default.Pause else Icons.Default.PlayArrow, null)
+                        Spacer(Modifier.width(8.dp))
                         Text(if (isRunning) "暂停" else "继续")
                     }
-                    OutlinedButton(onClick = { 
-                        musicManager.stopAllNotifications()
-                        time = if (type == GlobalTimerType.REST) targetSeconds else 0
-                        soundPlayed = false
-                        lastTickTime = System.currentTimeMillis()
-                    }) {
+                    OutlinedButton(
+                        onClick = { 
+                            musicManager.stopAllNotifications()
+                            viewModel?.resetTimer()
+                        },
+                        modifier = Modifier.weight(1f).height(48.dp),
+                        shape = RectangleShape
+                    ) {
                         Icon(Icons.Default.Refresh, null)
+                        Spacer(Modifier.width(8.dp))
                         Text("重置")
                     }
                 }

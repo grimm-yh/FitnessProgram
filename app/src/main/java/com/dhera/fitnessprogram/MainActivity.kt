@@ -19,6 +19,7 @@ import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffo
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.dhera.fitnessprogram.data.AppDatabase
@@ -50,7 +51,8 @@ class MainActivity : ComponentActivity() {
 
         enableEdgeToEdge()
         setContent {
-            FitnessProgramTheme {
+            val appTheme by viewModel.appTheme.collectAsState()
+            FitnessProgramTheme(appTheme = appTheme) {
                 FitnessProgramApp(viewModel, musicManager)
             }
         }
@@ -70,7 +72,6 @@ fun FitnessProgramApp(viewModel: MainViewModel, musicManager: MusicManager) {
     val activeTimerType by viewModel.activeTimerType.collectAsState()
     val activeTimerTarget by viewModel.activeTimerTarget.collectAsState()
     val timerMinimized by viewModel.timerMinimized.collectAsState()
-    val activeTimerTask by viewModel.activeTimerTask.collectAsState()
 
     NavigationSuiteScaffold(
         navigationSuiteItems = {
@@ -109,7 +110,8 @@ fun FitnessProgramApp(viewModel: MainViewModel, musicManager: MusicManager) {
                             }
                         },
                         modifier = Modifier.padding(bottom = 80.dp),
-                        containerColor = if (isMusicPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+                        containerColor = if (isMusicPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                        shape = RectangleShape
                     ) {
                         Icon(
                             imageVector = if (isMusicPlaying) Icons.Default.MusicNote else Icons.Default.MusicOff,
@@ -118,46 +120,44 @@ fun FitnessProgramApp(viewModel: MainViewModel, musicManager: MusicManager) {
                     }
                 }
             ) { innerPadding ->
-                val modifier = Modifier.padding(innerPadding)
-                
-                when (currentDestination) {
-                    AppDestinations.HOME -> HomeScreen(viewModel, musicManager, modifier)
-                    AppDestinations.PLANS -> PlansScreen(viewModel, musicManager, modifier)
-                    AppDestinations.SETTINGS -> {
-                        var showAbout by remember { mutableStateOf(false) }
-                        if (showAbout) {
-                            AboutScreen(onBack = { showAbout = false }, modifier = Modifier.fillMaxSize())
-                        } else {
-                            SettingsScreen(
-                                viewModel = viewModel,
-                                musicManager = musicManager,
-                                onAboutClick = { showAbout = true },
-                                modifier = modifier
-                            )
+                Box(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
+                    when (currentDestination) {
+                        AppDestinations.HOME -> HomeScreen(viewModel, musicManager, Modifier.fillMaxSize())
+                        AppDestinations.PLANS -> PlansScreen(viewModel, musicManager, Modifier.fillMaxSize())
+                        AppDestinations.SETTINGS -> {
+                            var showAbout by remember { mutableStateOf(false) }
+                            if (showAbout) {
+                                AboutScreen(onBack = { showAbout = false }, modifier = Modifier.fillMaxSize())
+                            } else {
+                                SettingsScreen(
+                                    viewModel = viewModel,
+                                    musicManager = musicManager,
+                                    onAboutClick = { showAbout = true },
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
                         }
                     }
+
+                    // Global Floating Timer Window
+                    if (activeTimerType != null) {
+                        TimerWindow(
+                            type = activeTimerType!!,
+                            targetSeconds = activeTimerTarget,
+                            minimized = timerMinimized,
+                            onToggleMinimize = {
+                                musicManager.stopAllNotifications()
+                                viewModel.toggleTimerMinimize()
+                            },
+                            onClose = {
+                                musicManager.stopAllNotifications()
+                                viewModel.closeTimer()
+                            },
+                            musicManager = musicManager,
+                            viewModel = viewModel
+                        )
+                    }
                 }
-            }
-            
-            // Global Floating Timer Window
-            if (activeTimerType != null) {
-                TimerWindow(
-                    type = activeTimerType!!,
-                    targetSeconds = activeTimerTarget,
-                    minimized = timerMinimized,
-                    onToggleMinimize = { 
-                        musicManager.stopAllNotifications()
-                        viewModel.toggleTimerMinimize() 
-                    },
-                    onClose = { 
-                        musicManager.stopAllNotifications()
-                        viewModel.closeTimer() 
-                    },
-                    onRestFinished = {
-                        activeTimerTask?.let { viewModel.incrementTaskSets(it) }
-                    },
-                    musicManager = musicManager
-                )
             }
         }
     }

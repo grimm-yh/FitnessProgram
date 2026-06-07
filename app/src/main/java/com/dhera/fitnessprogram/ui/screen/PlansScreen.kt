@@ -19,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -50,10 +51,13 @@ fun PlansScreen(viewModel: MainViewModel, musicManager: MusicManager, modifier: 
         Scaffold(
             modifier = modifier,
             floatingActionButton = {
-                FloatingActionButton(onClick = { 
-                    musicManager.stopAllNotifications()
-                    showAddPlanDialog = true 
-                }) {
+                FloatingActionButton(
+                    onClick = { 
+                        musicManager.stopAllNotifications()
+                        showAddPlanDialog = true 
+                    },
+                    shape = MaterialTheme.shapes.medium
+                ) {
                     Icon(Icons.Default.Add, contentDescription = "新增计划")
                 }
             }
@@ -147,10 +151,13 @@ fun PlanDetailView(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { 
-                musicManager.stopAllNotifications()
-                showAddItemDialog = true 
-            }) {
+            FloatingActionButton(
+                onClick = { 
+                    musicManager.stopAllNotifications()
+                    showAddItemDialog = true 
+                },
+                shape = RectangleShape
+            ) {
                 Icon(Icons.Default.Add, contentDescription = "添加动作")
             }
         }
@@ -306,7 +313,8 @@ fun PlanDetailView(
 fun PlanItem(plan: TrainingPlan, onClick: () -> Unit, onDelete: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        onClick = onClick
+        onClick = onClick,
+        shape = RectangleShape
     ) {
         Row(
             modifier = Modifier.padding(16.dp).fillMaxWidth(),
@@ -328,7 +336,8 @@ fun PlanItem(plan: TrainingPlan, onClick: () -> Unit, onDelete: () -> Unit) {
 fun TrainingItemRow(item: TrainingItem, elevation: androidx.compose.ui.unit.Dp = 0.dp) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = elevation)
+        elevation = CardDefaults.cardElevation(defaultElevation = elevation),
+        shape = RectangleShape
     ) {
         Row(
             modifier = Modifier.padding(12.dp).fillMaxWidth(),
@@ -341,6 +350,13 @@ fun TrainingItemRow(item: TrainingItem, elevation: androidx.compose.ui.unit.Dp =
                     text = "${item.sets}组 | ${item.count ?: "-"}次 | ${item.duration ?: "-"}秒 | 间歇${item.rest ?: "-"}秒",
                     style = MaterialTheme.typography.bodySmall
                 )
+                if (item.notes.isNotEmpty()) {
+                    Text(
+                        text = "备注: ${item.notes}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
             }
         }
     }

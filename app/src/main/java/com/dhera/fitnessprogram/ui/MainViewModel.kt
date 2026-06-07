@@ -6,13 +6,14 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.dhera.fitnessprogram.MusicManager
 import com.dhera.fitnessprogram.data.TrainingRepository
 import com.dhera.fitnessprogram.data.entity.DailyProgress
 import com.dhera.fitnessprogram.data.entity.TrainingItem
 import com.dhera.fitnessprogram.data.entity.TrainingPlan
-import kotlinx.coroutines.ExperimentalCoroutinesApi
+import com.dhera.fitnessprogram.ui.theme.AppTheme
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
@@ -29,6 +30,15 @@ enum class GlobalTimerType { REST, DURATION }
 class MainViewModel(application: Application, private val repository: TrainingRepository) : AndroidViewModel(application) {
 
     private val prefs = application.getSharedPreferences("fitness_settings", Context.MODE_PRIVATE)
+
+    // Theme Settings
+    private val _appTheme = MutableStateFlow(AppTheme.entries.find { it.name == prefs.getString("app_theme", AppTheme.DEFAULT.name) } ?: AppTheme.DEFAULT)
+    val appTheme: StateFlow<AppTheme> = _appTheme.asStateFlow()
+
+    fun setAppTheme(theme: AppTheme) {
+        _appTheme.value = theme
+        prefs.edit().putString("app_theme", theme.name).apply()
+    }
 
     private val _selectedDate = MutableStateFlow(LocalDate.now())
     val selectedDate: StateFlow<LocalDate> = _selectedDate.asStateFlow()
@@ -53,16 +63,75 @@ class MainViewModel(application: Application, private val repository: TrainingRe
     private val _timerMinimized = MutableStateFlow(false)
     val timerMinimized = _timerMinimized.asStateFlow()
 
-    fun startTimer(type: GlobalTimerType, target: Int, task: TodayTask) {
+    private val _timerCurrentValue = MutableStateFlow(0)
+    val timerCurrentValue = _timerCurrentValue.asStateFlow()
+
+    private val _timerIsRunning = MutableStateFlow(false)
+    val timerIsRunning = _timerIsRunning.asStateFlow()
+
+    private var timerJob: Job? = null
+
+    fun startTimer(type: GlobalTimerType, target: Int, task: TodayTask, musicManager: MusicManager) {
+        timerJob?.cancel()
         _activeTimerType.value = type
         _activeTimerTarget.value = target
         _activeTimerTask.value = task
         _timerMinimized.value = false
+        _timerCurrentValue.value = if (type == GlobalTimerType.REST) target else 0
+        _timerIsRunning.value = true
+
+        timerJob = viewModelScope.launch(Dispatchers.Default) {
+            var lastTickTime = System.currentTimeMillis()
+            var soundPlayed = false
+            
+            while (isActive && _timerIsRunning.value) {
+                delay(200)
+                val now = System.currentTimeMillis()
+                if (now - lastTickTime >= 1000) {
+                    lastTickTime = now
+                    if (type == GlobalTimerType.REST) {
+                        if (_timerCurrentValue.value > 0) {
+                            _timerCurrentValue.value -= 1
+                        }
+                        if (_timerCurrentValue.value == 0 && !soundPlayed) {
+                            soundPlayed = true
+                            _timerIsRunning.value = false
+                            withContext(Dispatchers.Main) {
+                                musicManager.playRestFinishSound()
+                                incrementTaskSets(task)
+                                closeTimer() // Auto close on finish
+                            }
+                        }
+                    } else {
+                        _timerCurrentValue.value += 1
+                        if (_timerCurrentValue.value >= target && !soundPlayed) {
+                            soundPlayed = true
+                            withContext(Dispatchers.Main) {
+                                musicManager.playDurationFinishSound()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fun pauseResumeTimer() {
+        _timerIsRunning.value = !_timerIsRunning.value
+        // If resuming, we need to restart the loop if it was stopped. 
+        // For simplicity, let's keep the job running but checking the isRunning flag.
+    }
+
+    fun resetTimer() {
+        _timerCurrentValue.value = if (_activeTimerType.value == GlobalTimerType.REST) _activeTimerTarget.value else 0
+        _timerIsRunning.value = false
     }
 
     fun closeTimer() {
+        timerJob?.cancel()
         _activeTimerType.value = null
         _activeTimerTask.value = null
+        _timerIsRunning.value = false
     }
 
     fun toggleTimerMinimize() {
@@ -115,6 +184,7 @@ class MainViewModel(application: Application, private val repository: TrainingRe
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun incrementTaskSets(task: TodayTask) {
+        if (task.isFinished) return
         viewModelScope.launch {
             val newCompletedSets = task.completedSets + 1
             val isNowFinished = newCompletedSets >= task.item.sets
@@ -123,7 +193,7 @@ class MainViewModel(application: Application, private val repository: TrainingRe
                     date = _selectedDate.value,
                     itemId = task.item.id,
                     completedSets = newCompletedSets,
-                    isFinished = isNowFinished || task.isFinished
+                    isFinished = isNowFinished
                 )
             )
         }
