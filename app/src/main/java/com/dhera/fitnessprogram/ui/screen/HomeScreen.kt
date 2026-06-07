@@ -254,7 +254,7 @@ fun TimerWindow(
                     Button(
                         onClick = { 
                             musicManager.stopAllNotifications()
-                            viewModel?.pauseResumeTimer()
+                            viewModel?.pauseResumeTimer(musicManager)
                         },
                         modifier = Modifier.weight(1f).height(48.dp),
                         shape = RectangleShape

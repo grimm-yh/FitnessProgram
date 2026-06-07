@@ -2,6 +2,7 @@ package com.dhera.fitnessprogram.ui
 
 import android.app.Application
 import android.content.Context
+import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -70,6 +71,8 @@ class MainViewModel(application: Application, private val repository: TrainingRe
     val timerIsRunning = _timerIsRunning.asStateFlow()
 
     private var timerJob: Job? = null
+    private var startTimeMillis: Long = 0
+    private var baseSeconds: Int = 0
 
     fun startTimer(type: GlobalTimerType, target: Int, task: TodayTask, musicManager: MusicManager) {
         timerJob?.cancel()
@@ -78,53 +81,70 @@ class MainViewModel(application: Application, private val repository: TrainingRe
         _activeTimerTask.value = task
         _timerMinimized.value = false
         _timerCurrentValue.value = if (type == GlobalTimerType.REST) target else 0
+        
+        baseSeconds = _timerCurrentValue.value
+        startTimeMillis = SystemClock.elapsedRealtime()
         _timerIsRunning.value = true
 
+        launchTimerJob(musicManager)
+    }
+
+    private fun launchTimerJob(musicManager: MusicManager) {
+        val type = _activeTimerType.value ?: return
+        val target = _activeTimerTarget.value
+        val task = _activeTimerTask.value ?: return
+        
         timerJob = viewModelScope.launch(Dispatchers.Default) {
-            var lastTickTime = System.currentTimeMillis()
             var soundPlayed = false
-            
             while (isActive && _timerIsRunning.value) {
-                delay(200)
-                val now = System.currentTimeMillis()
-                if (now - lastTickTime >= 1000) {
-                    lastTickTime = now
-                    if (type == GlobalTimerType.REST) {
-                        if (_timerCurrentValue.value > 0) {
-                            _timerCurrentValue.value -= 1
-                        }
-                        if (_timerCurrentValue.value == 0 && !soundPlayed) {
-                            soundPlayed = true
-                            _timerIsRunning.value = false
-                            withContext(Dispatchers.Main) {
-                                musicManager.playRestFinishSound()
-                                incrementTaskSets(task)
-                                closeTimer() // Auto close on finish
-                            }
-                        }
-                    } else {
-                        _timerCurrentValue.value += 1
-                        if (_timerCurrentValue.value >= target && !soundPlayed) {
-                            soundPlayed = true
-                            withContext(Dispatchers.Main) {
-                                musicManager.playDurationFinishSound()
-                            }
-                        }
+                val elapsedSeconds = ((SystemClock.elapsedRealtime() - startTimeMillis) / 1000).toInt()
+                
+                val newValue = if (type == GlobalTimerType.REST) {
+                    (baseSeconds - elapsedSeconds).coerceAtLeast(0)
+                } else {
+                    baseSeconds + elapsedSeconds
+                }
+                
+                _timerCurrentValue.value = newValue
+
+                if (type == GlobalTimerType.REST && newValue == 0 && !soundPlayed) {
+                    soundPlayed = true
+                    _timerIsRunning.value = false
+                    withContext(Dispatchers.Main) {
+                        musicManager.playRestFinishSound()
+                        incrementTaskSets(task)
+                        closeTimer()
+                    }
+                } else if (type == GlobalTimerType.DURATION && newValue >= target && !soundPlayed) {
+                    soundPlayed = true
+                    withContext(Dispatchers.Main) {
+                        musicManager.playDurationFinishSound()
                     }
                 }
+                
+                delay(200) // Snap check
             }
         }
     }
 
-    fun pauseResumeTimer() {
-        _timerIsRunning.value = !_timerIsRunning.value
-        // If resuming, we need to restart the loop if it was stopped. 
-        // For simplicity, let's keep the job running but checking the isRunning flag.
+    fun pauseResumeTimer(musicManager: MusicManager) {
+        if (_timerIsRunning.value) {
+            _timerIsRunning.value = false
+            timerJob?.cancel()
+        } else {
+            baseSeconds = _timerCurrentValue.value
+            startTimeMillis = SystemClock.elapsedRealtime()
+            _timerIsRunning.value = true
+            launchTimerJob(musicManager)
+        }
     }
 
     fun resetTimer() {
-        _timerCurrentValue.value = if (_activeTimerType.value == GlobalTimerType.REST) _activeTimerTarget.value else 0
         _timerIsRunning.value = false
+        timerJob?.cancel()
+        val type = _activeTimerType.value
+        val target = _activeTimerTarget.value
+        _timerCurrentValue.value = if (type == GlobalTimerType.REST) target else 0
     }
 
     fun closeTimer() {
