@@ -7,15 +7,14 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 
-class MusicManager(context: Context) {
-    private val appContext = context.applicationContext
+class MusicManager(private val context: Context) {
     private var backgroundPlayer: MediaPlayer? = null
     private var notificationPlayer: MediaPlayer? = null
     private var wasPlayingBeforeNotification = false
 
     fun startBackgroundMusic() {
         if (backgroundPlayer == null) {
-            backgroundPlayer = MediaPlayer.create(appContext, R.raw.background_music).apply {
+            backgroundPlayer = MediaPlayer.create(context, R.raw.background_music).apply {
                 isLooping = true
             }
         }
@@ -56,7 +55,7 @@ class MusicManager(context: Context) {
         }
 
         notificationPlayer?.release()
-        notificationPlayer = MediaPlayer.create(appContext, resId).apply {
+        notificationPlayer = MediaPlayer.create(context, resId).apply {
             setVolume(1.0f, 1.0f)
             setOnCompletionListener {
                 if (wasPlayingBeforeNotification) {
@@ -70,11 +69,11 @@ class MusicManager(context: Context) {
 
     private fun vibrate(duration: Int) {
         val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val vibratorManager = appContext.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
             vibratorManager.defaultVibrator
         } else {
             @Suppress("DEPRECATION")
-            appContext.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+            context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
         }
 
         vibrator.vibrate(VibrationEffect.createOneShot(duration.toLong(), VibrationEffect.DEFAULT_AMPLITUDE))
