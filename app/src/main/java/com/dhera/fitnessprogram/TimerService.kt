@@ -1,9 +1,11 @@
 package com.dhera.fitnessprogram
 
 import android.app.*
+import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 
 class TimerService : Service() {
@@ -11,7 +13,10 @@ class TimerService : Service() {
     companion object {
         const val CHANNEL_ID = "TimerServiceChannel"
         const val NOTIFICATION_ID = 101
+        const val ACTION_STOP_SERVICE = "STOP_SERVICE"
     }
+
+    private var wakeLock: PowerManager.WakeLock? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -19,6 +24,14 @@ class TimerService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STOP_SERVICE) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
+        acquireWakeLock()
+
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("健身计划")
             .setContentText("训练计时器正在后台运行")
@@ -30,7 +43,27 @@ class TimerService : Service() {
 
         startForeground(NOTIFICATION_ID, notification)
         
-        return START_NOT_STICKY
+        return START_STICKY
+    }
+
+    private fun acquireWakeLock() {
+        if (wakeLock == null) {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+            wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "FitnessProgram:TimerWakeLock")
+            wakeLock?.acquire(10 * 60 * 1000L /*10 minutes max*/)
+        }
+    }
+
+    private fun releaseWakeLock() {
+        if (wakeLock?.isHeld == true) {
+            wakeLock?.release()
+        }
+        wakeLock = null
+    }
+
+    override fun onDestroy() {
+        releaseWakeLock()
+        super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
