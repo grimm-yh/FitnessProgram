@@ -2,12 +2,15 @@ package com.dhera.fitnessprogram.ui
 
 import android.app.Application
 import android.content.Context
+import android.content.Intent
+import android.os.Build
 import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.dhera.fitnessprogram.MusicManager
+import com.dhera.fitnessprogram.TimerService
 import com.dhera.fitnessprogram.data.TrainingRepository
 import com.dhera.fitnessprogram.data.entity.DailyProgress
 import com.dhera.fitnessprogram.data.entity.TrainingItem
@@ -86,6 +89,14 @@ class MainViewModel(application: Application, private val repository: TrainingRe
         startTimeMillis = SystemClock.elapsedRealtime()
         _timerIsRunning.value = true
 
+        // Start Foreground Service to keep process alive in background
+        val intent = Intent(getApplication(), TimerService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            getApplication<Application>().startForegroundService(intent)
+        } else {
+            getApplication<Application>().startService(intent)
+        }
+
         launchTimerJob(musicManager)
     }
 
@@ -145,6 +156,7 @@ class MainViewModel(application: Application, private val repository: TrainingRe
         val type = _activeTimerType.value
         val target = _activeTimerTarget.value
         _timerCurrentValue.value = if (type == GlobalTimerType.REST) target else 0
+        getApplication<Application>().stopService(Intent(getApplication(), TimerService::class.java))
     }
 
     fun closeTimer() {
@@ -152,6 +164,9 @@ class MainViewModel(application: Application, private val repository: TrainingRe
         _activeTimerType.value = null
         _activeTimerTask.value = null
         _timerIsRunning.value = false
+        
+        // Stop Foreground Service
+        getApplication<Application>().stopService(Intent(getApplication(), TimerService::class.java))
     }
 
     fun toggleTimerMinimize() {
